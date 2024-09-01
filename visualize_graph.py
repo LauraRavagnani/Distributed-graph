@@ -24,10 +24,10 @@ def visualize_graph(num, pos_masses, pars_file, edge_index):
     pos *= boxsize/1.e3   # show in Mpc
 
     # Draw lines for each edge
-    for (src, dst) in edge_index.t().tolist():
+    for (src, dst) in edge_index: #.t().tolist():
 
-        src = pos[src].tolist()
-        dst = pos[dst].tolist()
+        src = pos[int(src)].tolist()
+        dst = pos[int(dst)].tolist()
 
         ax.plot([src[0], dst[0]], [src[1], dst[1]], zs=[src[2], dst[2]], linewidth=0.6, color='dimgrey')
 
@@ -46,7 +46,7 @@ def visualize_graph(num, pos_masses, pars_file, edge_index):
 
     rl = '$R_{link} = 0.2$'
 
-    ax.set_title(f'\tGraph n°{num}, Masses $\\geq 99.7$% percentile, {rl} Mpc \t \n \n $\\Omega_m = {float(pars_file[int(num), 0]):.3f}$ \t $\\sigma_8 = {float(pars_file[int(num), 1]):.3f}$', fontsize=20)
+    ax.set_title(f'\tGraph n°{num}, Masses $\\geq 99.7$% percentile, {rl} Mpc \t \n \n $\\Omega_m = {float(pars_file[0]):.3f}$ \t $\\sigma_8 = {float(pars_file[1]):.3f}$', fontsize=20)
 
     # fig.savefig("Plots/Graphs/graph_"+num+"_997.png", bbox_inches='tight', pad_inches=0.6, dpi=400)
     # plt.close(fig)
