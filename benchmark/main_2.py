@@ -137,38 +137,37 @@ def create_graph(rdd):
     return(sim_graph)
 
 
-output_file = 'time_output_1.pkl' #output file
 
-partitions_default = 16 # default partitions
-cut_default = 0.997 # default cut
+output_file = 'time_output_2.pkl' #output file
+
+partitions_default = 16 #default partitions
+cut_default = 0.997 #default cut
 
 ######################### output structure building ####################################
 
-par_names = ("memory", "mass cut", "partitions", "cores") #nomi dei parametri
+par_names = ("memory", "partitions", "cores") #nomi dei parametri
 
 #dizionario con i nomi dei parametri come indici e i parametri come tuple di valori
 parameters = {par_names[0]: ('512m','1g','2g','3g','4g'),
-             par_names[1]: (0.994,0.995,0.996,0.997,0.998),
-             par_names[2]: (1,4,8,16,32),
-             par_names[3]: (1,2,3,4)}
-
+             par_names[1]: (1,4,8,16,32),
+             par_names[2]: (1,2,3,4)}
 
 #dizionario delle combinazioni: indice numerico come key e come valore una tupla con gli indici numerici della combinazione
-combinations = {}
-for i, comb in enumerate(it.combinations(tuple(range(len(par_names))),2)):
-    combinations[i] = comb
+combinations ={}
+for i,comb in enumerate(it.combinations(tuple(range(len(par_names))),2)):
+    combinations[i]=comb
 
 #nomi delle combinazioni
-comb_names = [(par_names[combinations[i][0]], par_names[combinations[i][1]]) for i in range(6)]
+comb_names = [(par_names[combinations[i][0]],par_names[combinations[i][1]]) for i in range(3)]
 
 #lista dei tempi
-times = ['creation_time']
+times = ['clustering_time','graphing_time']
 
 #dataframe con gli output, dizionario di dizionari di dataframe (tempo -> coppia di parametri -> heatmap)
 output_times = {}
 for j in range(len(times)):
     output = {}
-    for i in range(6):
+    for i in range(3):
         indx = pd.MultiIndex.from_product([[par_names[combinations[i][0]]], parameters[(par_names[combinations[i][0]])]])
         column = pd.MultiIndex.from_product([[par_names[combinations[i][1]]], parameters[(par_names[combinations[i][1]])]])
         output[comb_names[i]] = pd.DataFrame(0, index=indx, columns=column)
@@ -184,15 +183,15 @@ for pairs in combinations:
     par2 = combinations[pairs][1]
 
     #looping over the two parameters' values
-    for i, par_val_1 in enumerate(parameters[par_names[par1]]):
-        for j, par_val_2 in enumerate(parameters[par_names[par2]]):
+    for i,par_val_1 in enumerate(parameters[par_names[par1]]):
+        for j,par_val_2 in enumerate(parameters[par_names[par2]]):
             
             ###################### spark context ######################
             
             #setup basic configuration
             conf = SparkConf()
             conf.setMaster("spark://master:7077")
-            conf.setAppName("CosmoSparkApplicationBenchmark_1")
+            conf.setAppName("CosmoSparkApplicationBenchmark_2")
             
             config_dict = {}
 
@@ -214,23 +213,19 @@ for pairs in combinations:
 
             # Apply all key-value pairs using setAll
             conf.setAll(config_dict.items())
-
+            
             spark = SparkSession.builder\
                                 .config(conf=conf)\
                                 .getOrCreate()
+            sc = spark.sparkContext    
 
-            sc = spark.sparkContext
-
-            
             ###################### spark context ###################### 
-            
+
             print('--------------------------------------')
             print('spark context enable')
             print(combinations[pairs]," ", par_val_1," ", par_val_2, '\n')
 
-            # start time
-            start_time = time.time()
-        
+
             # number of simulations to be processed
             n_sims = 2000
 
@@ -238,10 +233,10 @@ for pairs in combinations:
             path_list = [(i, "/mnt/cosmo_GNN/Data/" + str(i)) for i in range(n_sims)]
 
             # parallelize path list and read files
-            if (par1 == 2):
+            if (par1 == 1):
                 fof_rdd = sc.parallelize(path_list, numSlices=par_val_1)\
                             .mapValues(read_cosmo_data)
-            elif (par2 == 2):
+            elif (par2 == 1):
                 fof_rdd = sc.parallelize(path_list, numSlices=par_val_2)\
                             .mapValues(read_cosmo_data)
             else:
@@ -250,19 +245,14 @@ for pairs in combinations:
                 
             # get positions and masses for each point
             pos_mass_rdd = fof_rdd.mapValues(get_pos_mass)\
-                                  .flatMap(assign_key_to_rows)
+                              .flatMap(assign_key_to_rows)
             # cut percentile
-            if (par1 == 1):
-                cut = par_val_1
-            elif (par2 == 1):
-                cut = par_val_2
-            else:
-                cut = cut_default
+            cut = cut_default
 
             # get mass cuts 
             mass_cut_rdd = fof_rdd.mapValues(get_pos_mass)\
                                   .mapValues(lambda x: np.quantile(x[:, -1], cut))
-
+        
             mass_cuts = mass_cut_rdd.values().collect()
 
             mass_cuts = np.array(mass_cuts)
@@ -270,20 +260,133 @@ for pairs in combinations:
             # filter by mass
             pos_mass_rdd_filtered = pos_mass_rdd.filter(lambda x: x[1][-1] >= mass_cuts[x[0]])
 
+            # clustering star time
+            start_time = time.time()
+
+            boxes = sub_box_bounds(4, 0.2)
+
+            # masses rdd ---> (simkey, mass)
+            mass_rdd = pos_mass_rdd_filtered.mapValues(lambda x: x[3])
+
+            # positions rdd ---> (simkey, pos)
+            pos_rdd = pos_mass_rdd_filtered.mapValues(lambda x: x[:3])
+
+            # indexed positions rdd (point indexes)
+            # --> (simkey, (point_idx, array(x, y, z)) )
+            idx_pos_rdd = pos_rdd.groupByKey()\
+                                 .flatMapValues(lambda vals: enumerate(vals))
+
+            # indexed positions rdd with box assigned
+            # --> ( simkey_boxkey, (point_idx, array(x, y, z)) )
+            idx_pos_box_rdd = idx_pos_rdd.flatMapValues(lambda p: assign_box(p, boxes))\
+                                         .map(lambda x: (str(x[0]) + '_' + x[1][0], x[1][1]))
+
+            # obtain all the possible point pairs for each simulation clustered by boxes
+            # --> ( (simkey_boxkey, (idx, array)), (simkey_boxkey, (idx, array)) )
+            cartesian_rdd = idx_pos_box_rdd.groupByKey()\
+                                           .flatMapValues(lambda points: [(p1,p2) for p1 in points for p2 in points])\
+                                           .map(lambda x: ((x[0], x[1][0]),(x[0], x[1][1])))
+
+            # compute differences between every pair 
+            # --> (simkey_boxkey, (idx1, idx2, coord1, coord2, diff_coord))
+            diff_rdd = cartesian_rdd.map(lambda x:(x[0][0],(x[0][1][0], x[1][1][0], x[0][1][1],  x[1][1][1] , x[0][1][1]-x[1][1][1])))
+
+            # --> (simkey_boxkey, (idx1, idx2, coord1, coord2, diff_coord, norm))
+            pairs_dist_rdd_with_box = diff_rdd.mapValues(lambda x: (x[0], x[1], x[2], x[3], x[4], np.linalg.norm(x[4])))
+
+            pairs_dist_rdd_no_box = pairs_dist_rdd_with_box.map(lambda x: (int(x[0].split('_')[0]), (x[1])))\
+                                                           .map(convert_to_tuple)\
+                                                           .distinct()\
+                                                           .map(convert_to_array)
+        
+            linked_pairs_dist_rdd = pairs_dist_rdd_no_box.filter(lambda x: x[1][-1] <= 0.2)
+
             # count by key to trigger
-            count_halos = pos_mass_rdd_filtered.countByKey()
+            pair_count = linked_pairs_dist_rdd.countByKey()
 
-            # end time
-            end_time = time.time()
+            # end clustering time
+            time2 = time.time() - start_time
 
-            # total phase 1 time
-            time1 = end_time - start_time
+            print('clustering time:', time2)
 
-            # putting measured time in the right place in the heatmap
-            output_times[times[0]][comb_names[pairs]].iloc[i,j] = time1 
+            # save clustering time
+            output_times[times[0]][comb_names[pairs]].iloc[i,j] = time2 
 
-            print('\ntime for everything: ', time1, '\n')
+            # graph start time
+            graph_start_time = time.time()
 
+            # pairs rdd
+            pairs_rdd = linked_pairs_dist_rdd.mapValues(lambda x: (x[0], x[1]))
+
+            # centroids positions
+            halo_centroids = pos_rdd.reduceByKey(lambda x,y: (x+y)/2)
+
+            # joined rdd with halo centroids positions
+            joined_rdd = linked_pairs_dist_rdd.join(halo_centroids)
+
+            # distance between each point from each pair and halo centroid
+            row_col_diff_rdd = joined_rdd.mapValues(
+                lambda x: (
+                    x[0][0],        # idx_i
+                    x[0][1],        # idx_j
+                    x[0][2] - x[1], # row
+                    x[0][3] - x[1], # col
+                    x[0][4],        # diff
+                    x[0][5]         # dist
+                    ))
+
+            # normalizing 
+            normalized_rdd = row_col_diff_rdd.mapValues(
+                lambda x: (
+                    x[0],                      # idx_i
+                    x[1],                      # idx_j
+                    x[2]/np.linalg.norm(x[2]), # row_normalized
+                    x[3]/np.linalg.norm(x[3]), # col_normalized
+                    x[4]/np.linalg.norm(x[4]), # s_ij
+                    x[5]/0.2                   # |d_ij|/r 
+                )
+            )
+
+            # edge attributes
+            edge_attr_rdd = normalized_rdd.mapValues(
+                lambda x: (
+                    x[0],
+                    x[1],
+                    np.dot( x[2].T, x[3] ), # cos(alpha)
+                    np.dot( x[2].T, x[4] ), # cos(beta)
+                    x[5]                    # |d_ij|/r 
+                )
+            )
+
+            # group by simulation
+            grouped_idx_pos_rdd = pos_mass_rdd_filtered.groupByKey()\
+                                                       .mapValues(list)
+
+            grouped_edge_rdd = edge_attr_rdd.groupByKey()\
+                                            .mapValues(list)
+
+            # parallelize simulation parameters file and global features
+            sim_pars_file = np.loadtxt("/mnt/cosmo_GNN/latin_hypercube_params.txt", dtype=float)
+            param_rdd = sc.parallelize([(i, el) for i, el in enumerate(sim_pars_file)])
+
+            u = sc.parallelize([(i[0], math.log10(i[1])) for i in n_halos.items()])
+
+            # graph rdd (a graph for each simulation)
+            # masses, positions, simulation parameters, global features, edge indexes, edge features
+            raw_graph_rdd = grouped_idx_pos_rdd.join(grouped_edge_rdd)\
+                                               .join(u)\
+                                               .join(param_rdd)\
+                                               .mapValues(lambda x: (x[0][0][0], x[0][0][1], x[0][1], x[1]))
+
+            graph_rdd = raw_graph_rdd.mapValues(lambda x: create_graph(x))   
+
+            graph_rdd.collect()
+
+            time3 = time.time() - graph_start_time
+
+            print('graph time:', time3)
+        
+            output_times[times[1]][comb_names[pairs]].iloc[i,j] = time3 
         
             sc.stop()
             spark.stop()

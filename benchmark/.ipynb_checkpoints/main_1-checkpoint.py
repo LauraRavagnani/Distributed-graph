@@ -227,12 +227,10 @@ for pairs in combinations:
             print('--------------------------------------')
             print('spark context enable')
             print(combinations[pairs]," ", par_val_1," ", par_val_2, '\n')
-
-            # start time
             start_time = time.time()
         
             # number of simulations to be processed
-            n_sims = 2000
+            n_sims = 100
 
             # path list with simulation keys
             path_list = [(i, "/mnt/cosmo_GNN/Data/" + str(i)) for i in range(n_sims)]
@@ -262,27 +260,24 @@ for pairs in combinations:
             # get mass cuts 
             mass_cut_rdd = fof_rdd.mapValues(get_pos_mass)\
                                   .mapValues(lambda x: np.quantile(x[:, -1], cut))
-
+        
+            print('collecting cut values ', )
+            cut_start = time.time()
             mass_cuts = mass_cut_rdd.values().collect()
+            cut_end = time.time()
+            time1 = cut_end - cut_start
+
+            #putting measured time in the right place in the heatmap
+            output_times[times[0]][comb_names[pairs]].iloc[i,j] = time1 
 
             mass_cuts = np.array(mass_cuts)
 
             # filter by mass
             pos_mass_rdd_filtered = pos_mass_rdd.filter(lambda x: x[1][-1] >= mass_cuts[x[0]])
 
-            # count by key to trigger
-            count_halos = pos_mass_rdd_filtered.countByKey()
-
-            # end time
             end_time = time.time()
 
-            # total phase 1 time
-            time1 = end_time - start_time
-
-            # putting measured time in the right place in the heatmap
-            output_times[times[0]][comb_names[pairs]].iloc[i,j] = time1 
-
-            print('\ntime for everything: ', time1, '\n')
+            print('\ntime for everything: ', end_time - start_time, '\n')
 
         
             sc.stop()

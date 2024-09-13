@@ -44,23 +44,23 @@ def assign_key_to_rows(key_value_pair):
 
 # Function that returns the partitions bounds as a dictionary of lists of tuples, 
 # each tuple being the min and max of a dimension
-def sub_box_bounds(box_number,r_link): 
-    sub_length=1.0/box_number # partition length
-    bounds={}
-    base='box'
-    sub_box_counter=1
-    for x in range(0,box_number):
-        for y in range(0,box_number):
-            for z in range(0,box_number):
-                key=base+str(sub_box_counter)
-                single_bounds=[]
-                centre=[x,y,z] # vertex of a sub_box corresponding to min x,y,z
+def sub_box_bounds(box_number, r_link): 
+    sub_length = 1.0 / box_number # partition length
+    bounds = {}
+    base = 'box'
+    sub_box_counter = 1
+    for x in range(0, box_number):
+        for y in range(0, box_number):
+            for z in range(0, box_number):
+                key = base + str(sub_box_counter)
+                single_bounds = []
+                centre = [x, y, z] # vertex of a sub_box corresponding to min x,y,z
                 for i in range(3):
-                    min_bound=round(max(0,centre[i]*sub_length-0.5*r_link),2)
-                    max_bound=round(min(1,centre[i]*sub_length+sub_length+0.5*r_link),2)
-                    single_bounds.append((min_bound,max_bound))
-                bounds[key]=single_bounds
-                sub_box_counter+=1
+                    min_bound = round(max(0, centre[i] * sub_length - 0.5 * r_link), 2)
+                    max_bound = round(min(1, centre[i] * sub_length + sub_length + 0.5 * r_link), 2)
+                    single_bounds.append((min_bound, max_bound))
+                bounds[key] = single_bounds
+                sub_box_counter += 1
 
     return bounds
 
@@ -143,7 +143,7 @@ output_file = 'time_output.pkl'
 memories_1 = ['1g', '2g', '4g', '8g']
 cuts_2 = [0.995, 0.996, 0.997, 0.998]
 partitions_3 = [4, 8, 16, 32]
-cores_4 = [1,2,3,4]
+cores_4 = [1, 2, 3, 4]
 
 combinations = 6 #binomiale con n = 4 e k = 2 (4 parametri da cambiare una coppia alla volta)
 
@@ -155,11 +155,11 @@ combinations = 6 #binomiale con n = 4 e k = 2 (4 parametri da cambiare una coppi
 # 4: 2 - 4
 # 5: 3 - 4
 
-output = numpy.empty(shape = (6,4,4), dtype=double)
+output = np.empty(shape=(combinations, 4, 4), dtype=np.float32)
 
 #0: 4g - 0.998 equal to (0,2,3)
-for memory in ['4g']:#['1g', '2g', '4g', '8g']
-    for cut in [0.998]: #[0.995, 0.996, 0.997, 0.998]
+for memory in ['1g', '2g', '4g', '8g']:
+    for cut in [0.995, 0.996, 0.997, 0.998]:
         
         ###################### spark context ######################
 
@@ -170,8 +170,9 @@ for memory in ['4g']:#['1g', '2g', '4g', '8g']
         .getOrCreate()
         sc = spark.sparkContext   
 
+        ###################### spark context ###################### 
 
-        start_time = time.time()
+        #start_time = time.time()
         print('--------------------------------------')
         print('spark context enable')
         print('memory :', memory, ' cut :', cut, '\n')
@@ -179,7 +180,7 @@ for memory in ['4g']:#['1g', '2g', '4g', '8g']
 
 
         # number of simulations to be processed
-        n_sims = 1000
+        n_sims = 100
 
         # path list with simulation keys
         path_list = [(i, "/mnt/cosmo_GNN/Data/" + str(i)) for i in range(n_sims)]
@@ -202,14 +203,14 @@ for memory in ['4g']:#['1g', '2g', '4g', '8g']
         cut_start = time.time()
         mass_cuts = mass_cut_rdd.values().collect()
         cut_end = time.time()
-        print('\r', cut_end-cut_start, '\n')
+        print('\r', cut_end - cut_start, '\n')
 
         mass_cuts = np.array(mass_cuts)
 
         # filter by mass
         pos_mass_rdd_filtered = pos_mass_rdd.filter(lambda x: x[1][-1] >= mass_cuts[x[0]])
 
-        boxes = sub_box_bounds(5,0.2)
+        boxes = sub_box_bounds(5, 0.2)
 
         # masses rdd ---> (simkey, mass)
         mass_rdd = pos_mass_rdd_filtered.mapValues(lambda x: x[3])
@@ -218,7 +219,7 @@ for memory in ['4g']:#['1g', '2g', '4g', '8g']
         pos_rdd = pos_mass_rdd_filtered.mapValues(lambda x: x[:3])
 
         # indexed positions rdd (point indexes)
-        # --> ( simkey, (point_idx, array(x, y, z)) )
+        # --> (simkey, (point_idx, array(x, y, z)) )
         idx_pos_rdd = pos_rdd.groupByKey()\
                              .flatMapValues(lambda vals: enumerate(vals))
 
@@ -235,7 +236,7 @@ for memory in ['4g']:#['1g', '2g', '4g', '8g']
 
         # compute differences between every pair 
         # --> (simkey_boxkey, (idx1, idx2, coord1, coord2, diff_coord))
-        diff_rdd = cartesian_rdd.map(lambda x:(x[0][0],(x[0][1][0], x[1][1][0], x[0][1][1],  x[1][1][1] , x[0][1][1] - x[1][1][1])))
+        diff_rdd = cartesian_rdd.map(lambda x:(x[0][0],(x[0][1][0], x[1][1][0], x[0][1][1],  x[1][1][1] , x[0][1][1]-x[1][1][1])))
 
         # --> (simkey_boxkey, (idx1, idx2, coord1, coord2, diff_coord, norm))
         pairs_dist_rdd_with_box = diff_rdd.mapValues(lambda x: (x[0], x[1], x[2], x[3], x[4], np.linalg.norm(x[4])))
@@ -336,5 +337,5 @@ for memory in ['4g']:#['1g', '2g', '4g', '8g']
         sc.stop()
         spark.stop()
 
-with open(output_file, "wb") as fill:
-    pickle.dump(output, fill)
+#with open(output_file, "wb") as fill:
+#    pickle.dump(output, fill)
