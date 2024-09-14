@@ -148,8 +148,8 @@ cut_default = 0.997 #default cut
 par_names = ("memory", "partitions", "cores") #nomi dei parametri
 
 #dizionario con i nomi dei parametri come indici e i parametri come tuple di valori
-parameters = {par_names[0]: ('512m','1g','2g','3g','4g'),
-             par_names[1]: (1,4,8,16,32),
+parameters = {par_names[0]: ('512m','1g','2g','3g','4g', '5g', '6g', '7g', '8g'),
+             par_names[1]: (1,4,8,16,32,64),
              par_names[2]: (1,2,3,4)}
 
 #dizionario delle combinazioni: indice numerico come key e come valore una tupla con gli indici numerici della combinazione
@@ -259,6 +259,9 @@ for pairs in combinations:
 
             # filter by mass
             pos_mass_rdd_filtered = pos_mass_rdd.filter(lambda x: x[1][-1] >= mass_cuts[x[0]])
+
+            # number of halos in each simulation
+            n_halos = pos_mass_rdd_filtered.countByKey()
 
             # clustering star time
             start_time = time.time()
