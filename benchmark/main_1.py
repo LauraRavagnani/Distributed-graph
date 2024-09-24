@@ -144,27 +144,29 @@ cut_default = 0.997 # default cut
 
 ######################### output structure building ####################################
 
-par_names = ("memory", "mass cut", "partitions", "cores") #nomi dei parametri
+# paramter names
+par_names = ("memory", "mass cut", "partitions", "cores") 
 
-#dizionario con i nomi dei parametri come indici e i parametri come tuple di valori
+# dictionary with params name and values
 parameters = {par_names[0]: ('512m','1g','2g','3g','4g'),
              par_names[1]: (0.994,0.995,0.996,0.997,0.998),
              par_names[2]: (1,4,8,16,32),
              par_names[3]: (1,2,3,4)}
 
 
-#dizionario delle combinazioni: indice numerico come key e come valore una tupla con gli indici numerici della combinazione
+# combination dictionary: dictionary with a numeric index as a key
+# and a tuple of index to identify the parameters combination
 combinations = {}
 for i, comb in enumerate(it.combinations(tuple(range(len(par_names))),2)):
     combinations[i] = comb
 
-#nomi delle combinazioni
+# combination names
 comb_names = [(par_names[combinations[i][0]], par_names[combinations[i][1]]) for i in range(6)]
 
-#lista dei tempi
+# time list
 times = ['creation_time']
 
-#dataframe con gli output, dizionario di dizionari di dataframe (tempo -> coppia di parametri -> heatmap)
+# output dataframe, Dictionary of dictionary of dataframes (time -> parameter pairs -> heatmap)
 output_times = {}
 for j in range(len(times)):
     output = {}
@@ -179,17 +181,17 @@ for j in range(len(times)):
 
 for pairs in combinations:
 
-    #indexes of the parameters considered
+    # indexes of the parameters considered
     par1 = combinations[pairs][0]
     par2 = combinations[pairs][1]
 
-    #looping over the two parameters' values
+    # looping over the two parameters' values
     for i, par_val_1 in enumerate(parameters[par_names[par1]]):
         for j, par_val_2 in enumerate(parameters[par_names[par2]]):
             
             ###################### spark context ######################
             
-            #setup basic configuration
+            # setup basic configuration
             conf = SparkConf()
             conf.setMaster("spark://master:7077")
             conf.setAppName("CosmoSparkApplicationBenchmark_1")

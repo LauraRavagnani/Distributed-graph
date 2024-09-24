@@ -145,25 +145,27 @@ cut_default = 0.997 #default cut
 
 ######################### output structure building ####################################
 
-par_names = ("memory", "partitions", "cores") #nomi dei parametri
+# paramter names
+par_names = ("memory", "partitions", "cores") 
 
-#dizionario con i nomi dei parametri come indici e i parametri come tuple di valori
-parameters = {par_names[0]: ('512m','1g','2g','3g','4g', '5g', '6g', '7g', '8g'),
-             par_names[1]: (1,4,8,16,32,64),
+# dictionary with params name and values
+parameters = {par_names[0]: ('512m','1g','2g','3g','4g'),
+             par_names[1]: (1,4,8,16,32),
              par_names[2]: (1,2,3,4)}
 
-#dizionario delle combinazioni: indice numerico come key e come valore una tupla con gli indici numerici della combinazione
+# combination dictionary: dictionary with a numeric index as a key
+# and a tuple of index to identify the parameters combination
 combinations ={}
 for i,comb in enumerate(it.combinations(tuple(range(len(par_names))),2)):
     combinations[i]=comb
 
-#nomi delle combinazioni
+# combination names
 comb_names = [(par_names[combinations[i][0]],par_names[combinations[i][1]]) for i in range(3)]
 
-#lista dei tempi
+# time list
 times = ['clustering_time','graphing_time']
 
-#dataframe con gli output, dizionario di dizionari di dataframe (tempo -> coppia di parametri -> heatmap)
+# output dataframe,  Dictionary of dictionary of dataframes (time -> parameter pairs -> heatmap)
 output_times = {}
 for j in range(len(times)):
     output = {}
@@ -178,17 +180,17 @@ for j in range(len(times)):
 
 for pairs in combinations:
 
-    #indexes of the parameters considered
+    # indexes of the parameters considered
     par1 = combinations[pairs][0]
     par2 = combinations[pairs][1]
 
-    #looping over the two parameters' values
+    # looping over the two parameters' values
     for i,par_val_1 in enumerate(parameters[par_names[par1]]):
         for j,par_val_2 in enumerate(parameters[par_names[par2]]):
             
             ###################### spark context ######################
             
-            #setup basic configuration
+            # setup basic configuration
             conf = SparkConf()
             conf.setMaster("spark://master:7077")
             conf.setAppName("CosmoSparkApplicationBenchmark_2")
@@ -196,19 +198,19 @@ for pairs in combinations:
             config_dict = {}
 
             # fill the config dictionary 
-            if par1 == 0 and par2 == 3:
+            if par1 == 0 and par2 == 2:
                 config_dict["spark.executor.memory"] = par_val_1
                 config_dict["spark.executor.cores"] = par_val_2
-            elif par1 == 3 and par2 == 0:
+            elif par1 == 2 and par2 == 0:
                 config_dict["spark.executor.memory"] = par_val_2
                 config_dict["spark.executor.cores"] = par_val_1
             elif par1 == 0:
                 config_dict["spark.executor.memory"] = par_val_1
             elif par2 == 0:
                 config_dict["spark.executor.memory"] = par_val_2
-            elif par1 == 3:
+            elif par1 == 2:
                 config_dict["spark.executor.cores"] = par_val_1
-            elif par2 == 3:
+            elif par2 == 2:
                 config_dict["spark.executor.cores"] = par_val_2
 
             # Apply all key-value pairs using setAll
@@ -227,7 +229,7 @@ for pairs in combinations:
 
 
             # number of simulations to be processed
-            n_sims = 2000
+            n_sims = 900
 
             # path list with simulation keys
             path_list = [(i, "/mnt/cosmo_GNN/Data/" + str(i)) for i in range(n_sims)]
@@ -383,7 +385,7 @@ for pairs in combinations:
 
             graph_rdd = raw_graph_rdd.mapValues(lambda x: create_graph(x))   
 
-            graph_rdd.collect()
+            tot_graphs = graph_rdd.count()
 
             time3 = time.time() - graph_start_time
 
@@ -394,5 +396,6 @@ for pairs in combinations:
             sc.stop()
             spark.stop()
 
+# pickle file to store benchamrks 
 with open(output_file, "wb") as fill:
     pickle.dump([par_names,parameters,combinations,comb_names,times,output_times],fill)
